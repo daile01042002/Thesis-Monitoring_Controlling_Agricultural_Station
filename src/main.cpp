@@ -61,9 +61,16 @@
 #include "freertos/task.h"
 #include "DHT.h"
 #include "DHT20.h"
+#include <Shared_Attribute_Update.h>
+#include <Attribute_Request.h>
 
 #define SDA_PIN 11
 #define SCL_PIN 12
+#define RELAY1_PIN 2
+#define RELAY2_PIN 4
+#define RELAY3_PIN 5
+#define RELAY4_PIN 18
+
 
 DHT20 dht20;
 
@@ -82,6 +89,56 @@ ThingsBoard thingsBoard(mqttClient, maxMessageSize);
 
 float temperature = 0.0;
 float humidity = 0.0;
+
+void setupRelays() {
+  pinMode(RELAY1_PIN, OUTPUT);
+  pinMode(RELAY2_PIN, OUTPUT);
+  pinMode(RELAY3_PIN, OUTPUT);
+  pinMode(RELAY4_PIN, OUTPUT);
+
+  digitalWrite(RELAY1_PIN, LOW);
+  digitalWrite(RELAY2_PIN, LOW);
+  digitalWrite(RELAY3_PIN, LOW);
+  digitalWrite(RELAY4_PIN, LOW);
+}
+
+void setRelayState(int relayNumber, bool state) {
+  int pin;
+  switch (relayNumber) {
+    case 1: pin = RELAY1_PIN; break;
+    case 2: pin = RELAY2_PIN; break;
+    case 3: pin = RELAY3_PIN; break;
+    case 4: pin = RELAY4_PIN; break;
+    default: return;
+  }
+  digitalWrite(pin, state ? HIGH : LOW);
+}
+
+// --------------------- Shared Attributes Callback ---------------------
+void processSharedAttributes(const JsonObjectConst &data) {
+  Serial.println("Received Shared Attributes:");
+
+  if (data.containsKey("relay1")) {
+    bool state = data["relay1"];
+    setRelayState(1, state);
+    Serial.printf("Relay1 set to %s\n", state ? "ON" : "OFF");
+  }
+  if (data.containsKey("relay2")) {
+    bool state = data["relay2"];
+    setRelayState(2, state);
+    Serial.printf("Relay2 set to %s\n", state ? "ON" : "OFF");
+  }
+  if (data.containsKey("relay3")) {
+    bool state = data["relay3"];
+    setRelayState(3, state);
+    Serial.printf("Relay3 set to %s\n", state ? "ON" : "OFF");
+  }
+  if (data.containsKey("relay4")) {
+    bool state = data["relay4"];
+    setRelayState(4, state);
+    Serial.printf("Relay4 set to %s\n", state ? "ON" : "OFF");
+  }
+}
 
 void manageWifi(void *pvParameters){
   (void)pvParameters;
@@ -129,11 +186,13 @@ void connectToCoreIoT(void *pvParameters)
       else
       {
         Serial.println("Connected to Core IoT");
+        thingsBoard.Shared_Attributes_Update(processSharedAttributes);
       }
     }
     else
     {
       Serial.println("Core IoT already connected");
+      thingsBoard.loop();
       vTaskDelay(10000 / portTICK_PERIOD_MS);
     }
   }
@@ -189,6 +248,8 @@ void setup()
       ;
   }
 
+  setupRelays();
+  
   xTaskCreate(manageWifi, "ManageWifiTask", 4096, NULL, 1, NULL);
   xTaskCreate(connectToCoreIoT, "ConnectToCoreIoTTask", 4096, NULL, 1, NULL);
   xTaskCreate(readDHT20, "ReadDHT20Task", 4096, NULL, 2, NULL); // Higher priority
